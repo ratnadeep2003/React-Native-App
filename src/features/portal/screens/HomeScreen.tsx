@@ -6,6 +6,7 @@ import { exportService } from '../services/exportService';
 import { Button } from '../../../components/ui/Button';
 import { UserRowItem } from '../components/UserRowItem';
 import { UserModal } from '../components/UserModal';
+import { useStripe } from '@stripe/stripe-react-native';
 
 export default function HomeScreen() {
   const { theme, fontFamily, fontSize } = useTheme();
@@ -17,6 +18,7 @@ export default function HomeScreen() {
   const [totalCount, setTotalCount] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const fetchPage = async (pageNum: number, isInitial = false) => {
     try {
@@ -54,42 +56,70 @@ export default function HomeScreen() {
     setModalVisible(true);
   };
 
-  const handleSaveUser = async (formData: any) => {
-  try {
-    if (selectedUser) {
-      await userService.updateUser(selectedUser._id, {
-        firstname: formData.name.trim(),
-        surname: formData.surname.trim(),
-        email: formData.email.trim().toLowerCase(),
+  const handlePayNow = async () => {
+    try {
+      const res = await fetch('http://192.168.31.142:5050/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: 5000, currency: 'inr' }), // ₹50.00
       });
-    } else {
-      await userService.createUser({
-        firstname: formData.name.trim(),
-        surname: formData.surname.trim(),
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password || 'bypass_pass',
+      const data: { clientSecret: string } = await res.json();
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'Your App Name',
+        paymentIntentClientSecret: data.clientSecret,
       });
-    }
-    Alert.alert('Success', selectedUser ? 'User updated successfully.' : 'New user added successfully.');
-    setModalVisible(false);
-    fetchPage(1, true);
-    setPage(1);
-  } catch (err: any) {
-    Alert.alert('Error', err.message || 'Something went wrong.');
-  }
-};
+      if (initError) {
+        Alert.alert('Error', initError.message);
+        return;
+      }
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        Alert.alert('Payment failed', presentError.message);
+      } else {
+        Alert.alert('Success', 'Payment completed!');
+      }
+    } catch (err) {
+  console.error('Pay now error:', err);
+  Alert.alert('Error', 'Something went wrong.');
+}
+  };
 
-const handleDeleteUser = async (_email: string) => {
-  try {
-    if (!selectedUser) return;
-    await userService.deleteUser(selectedUser._id);
-    setModalVisible(false);
-    fetchPage(1, true);
-    setPage(1);
-  } catch (err: any) {
-    Alert.alert('Error', err.message || 'Failed to delete user.');
-  }
-};
+  const handleSaveUser = async (formData: any) => {
+    try {
+      if (selectedUser) {
+        await userService.updateUser(selectedUser._id, {
+          firstname: formData.name.trim(),
+          surname: formData.surname.trim(),
+          email: formData.email.trim().toLowerCase(),
+        });
+      } else {
+        await userService.createUser({
+          firstname: formData.name.trim(),
+          surname: formData.surname.trim(),
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password || 'bypass_pass',
+        });
+      }
+      Alert.alert('Success', selectedUser ? 'User updated successfully.' : 'New user added successfully.');
+      setModalVisible(false);
+      fetchPage(1, true);
+      setPage(1);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Something went wrong.');
+    }
+  };
+
+  const handleDeleteUser = async (_email: string) => {
+    try {
+      if (!selectedUser) return;
+      await userService.deleteUser(selectedUser._id);
+      setModalVisible(false);
+      fetchPage(1, true);
+      setPage(1);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to delete user.');
+    }
+  };
 
   const triggerExcelExport = () => {
     if (usersList.length === 0) {
@@ -131,62 +161,65 @@ const handleDeleteUser = async (_email: string) => {
 
   return (
     <>
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.inner}
-      data={usersList}
-      keyExtractor={(item) => item.email}
-      onEndReached={handleLoadMore}
-      onEndReachedThreshold={0.5}
-      ListHeaderComponent={
-        <>
-          <View style={styles.statsRow}>
-            <View style={styles.metricHeader}>
-              <View>
-                <Text style={styles.statValue}>{totalCount}</Text>
-                <Text style={styles.statLabel}>Total Signed Up Users</Text>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.inner}
+        data={usersList}
+        keyExtractor={(item) => item.email}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListHeaderComponent={
+          <>
+            <View style={styles.statsRow}>
+              <View style={styles.metricHeader}>
+                <View>
+                  <Text style={styles.statValue}>{totalCount}</Text>
+                  <Text style={styles.statLabel}>Total Signed Up Users</Text>
+                </View>
+                <View style={{ flexDirection: 'column', gap: 10, alignItems: 'stretch' }}>
+                  <Button label="+ Add User" onPress={handleOpenAddModal} style={{ paddingVertical: 10, paddingHorizontal: 14 }} />
+                  <Button label="Pay Now" onPress={handlePayNow} style={{ paddingVertical: 10, paddingHorizontal: 14 }} />
+                </View>
               </View>
-              <Button label="+ Add User" onPress={handleOpenAddModal} style={{ paddingVertical: 10, paddingHorizontal: 14 }} />
             </View>
-          </View>
 
-          <Text style={styles.sectionLabel}>Export User</Text>
-          <View style={styles.exportRow}>
-            <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]} onPress={triggerExcelExport}>
-              <Text style={{ color: theme.primary, fontWeight: '700', fontSize: fontSize - 1, fontFamily }}>📊 Export Excel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.accent + '15', borderColor: theme.accent }]} onPress={triggerPDFExport}>
-              <Text style={{ color: theme.accent, fontWeight: '700', fontSize: fontSize - 1, fontFamily }}>📄 Export PDF</Text>
-            </TouchableOpacity>
-          </View>
+            <Text style={styles.sectionLabel}>Export User</Text>
+            <View style={styles.exportRow}>
+              <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]} onPress={triggerExcelExport}>
+                <Text style={{ color: theme.primary, fontWeight: '700', fontSize: fontSize - 1, fontFamily }}>📊 Export Excel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.accent + '15', borderColor: theme.accent }]} onPress={triggerPDFExport}>
+                <Text style={{ color: theme.accent, fontWeight: '700', fontSize: fontSize - 1, fontFamily }}>📄 Export PDF</Text>
+              </TouchableOpacity>
+            </View>
 
-          <Text style={styles.sectionLabel}>Registered Account</Text>
-        </>
-      }
-      renderItem={({ item, index }) => (
-        <UserRowItem
-          idIndex={index + 1}
-          name={item.firstname}
-          surname={item.surname}
-          email={item.email}
-          onEditPress={() => handleOpenEditModal(item)}
-        />
-      )}
-      ListEmptyComponent={<Text style={styles.emptyText}>No accounts found.</Text>}
-      ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.footerLoader} color={theme.primary} /> : null}
-      ListFooterComponentStyle={{ paddingBottom: 20 }}
-    />
-    <UserModal
-    visible={modalVisible}
-    onClose={() => setModalVisible(false)}
-    onSave={handleSaveUser}
-    onDelete={handleDeleteUser}
-    initialData={selectedUser ? {
-    name: selectedUser.firstname,
-    surname: selectedUser.surname,
-    email: selectedUser.email,
-    } : null}
-    />
+            <Text style={styles.sectionLabel}>Registered Account</Text>
+          </>
+        }
+        renderItem={({ item, index }) => (
+          <UserRowItem
+            idIndex={index + 1}
+            name={item.firstname}
+            surname={item.surname}
+            email={item.email}
+            onEditPress={() => handleOpenEditModal(item)}
+          />
+        )}
+        ListEmptyComponent={<Text style={styles.emptyText}>No accounts found.</Text>}
+        ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.footerLoader} color={theme.primary} /> : null}
+        ListFooterComponentStyle={{ paddingBottom: 20 }}
+      />
+      <UserModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onSave={handleSaveUser}
+        onDelete={handleDeleteUser}
+        initialData={selectedUser ? {
+          name: selectedUser.firstname,
+          surname: selectedUser.surname,
+          email: selectedUser.email,
+        } : null}
+      />
     </>
   );
 }
