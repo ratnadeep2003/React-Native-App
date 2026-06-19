@@ -16,9 +16,10 @@ interface UserModalProps {
   onSave: (user: UserData) => void;
   onDelete: (email: string) => void;
   initialData: UserData | null;
+  fieldErrors?: Record<string, string[]>;
 }
 
-export const UserModal = ({ visible, onClose, onSave, onDelete, initialData }: UserModalProps) => {
+export const UserModal = ({ visible, onClose, onSave, onDelete, initialData, fieldErrors = {} }: UserModalProps) => {
   const { theme, fontFamily, fontSize } = useTheme();
 
   const [name, setName] = useState('');
@@ -76,6 +77,16 @@ export const UserModal = ({ visible, onClose, onSave, onDelete, initialData }: U
       borderColor: theme.border,
       marginBottom: 16,
     },
+    inputError: {
+      borderColor: '#E24B4A',
+      marginBottom: 4,
+    },
+    errorText: {
+      color: '#E24B4A',
+      fontSize: fontSize - 3,
+      fontFamily,
+      marginBottom: 12,
+    },
     deleteBtn: {
       paddingVertical: 12,
       borderRadius: 8,
@@ -88,6 +99,11 @@ export const UserModal = ({ visible, onClose, onSave, onDelete, initialData }: U
     btnFlex: { flex: 1 }
   });
 
+  const firstnameError = fieldErrors.firstname?.[0];
+  const surnameError = fieldErrors.surname?.[0];
+  const emailError = fieldErrors.email?.[0];
+  const passwordError = fieldErrors.password?.[0];
+
   return (
     <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
@@ -99,13 +115,28 @@ export const UserModal = ({ visible, onClose, onSave, onDelete, initialData }: U
 
                 <ScrollView keyboardShouldPersistTaps="handled">
                   <Text style={styles.label}>First Name</Text>
-                  <TextInput style={styles.input} placeholder="John" placeholderTextColor={theme.subtext} value={name} onChangeText={setName} />
+                  <TextInput
+                    style={[styles.input, firstnameError && styles.inputError]}
+                    placeholder="John"
+                    placeholderTextColor={theme.subtext}
+                    value={name}
+                    onChangeText={setName}
+                  />
+                  {firstnameError && <Text style={styles.errorText}>{firstnameError}</Text>}
 
                   <Text style={styles.label}>Surname</Text>
-                  <TextInput style={styles.input} placeholder="Doe" placeholderTextColor={theme.subtext} value={surname} onChangeText={setSurname} />
+                  <TextInput
+                    style={[styles.input, surnameError && styles.inputError]}
+                    placeholder="Doe"
+                    placeholderTextColor={theme.subtext}
+                    value={surname}
+                    onChangeText={setSurname}
+                  />
+                  {surnameError && <Text style={styles.errorText}>{surnameError}</Text>}
+
                   <Text style={styles.label}>Email Address</Text>
                   <TextInput
-                    style={[styles.input, initialData && { opacity: 0.6 }]}
+                    style={[styles.input, initialData && { opacity: 0.6 }, emailError && styles.inputError]}
                     placeholder="name@domain.com"
                     placeholderTextColor={theme.subtext}
                     value={email}
@@ -114,11 +145,20 @@ export const UserModal = ({ visible, onClose, onSave, onDelete, initialData }: U
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
+                  {emailError && <Text style={styles.errorText}>{emailError}</Text>}
 
                   {!initialData && (
                     <>
                       <Text style={styles.label}>Account Password</Text>
-                      <TextInput style={styles.input} placeholder="••••••••" placeholderTextColor={theme.subtext} value={password} onChangeText={setPassword} secureTextEntry />
+                      <TextInput
+                        style={[styles.input, passwordError && styles.inputError]}
+                        placeholder="••••••••"
+                        placeholderTextColor={theme.subtext}
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                      />
+                      {passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
                     </>
                   )}
 

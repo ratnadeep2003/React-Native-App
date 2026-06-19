@@ -19,7 +19,8 @@
     "react-native-razorpay": "^3.0.0",
     "react-native-safe-area-context": "^5.5.2",
     "stripe": "^22.2.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

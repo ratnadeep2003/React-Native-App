@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
 import { userService, UserRecord } from '../services/userService';
 import { exportService } from '../services/exportService';
@@ -11,32 +11,36 @@ import { useStripe } from '@stripe/stripe-react-native';
 export default function HomeScreen() {
   const { theme, fontFamily, fontSize } = useTheme();
   const [usersList, setUsersList] = useState<UserRecord[]>([]);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(1);//pagination
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  const [paymentAmount, setPaymentAmount] = useState('');
+  
   const [totalCount, setTotalCount] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const fetchPage = async (pageNum: number, isInitial = false) => {
     try {
       if (isInitial) setLoading(true); else setLoadingMore(true);
-      const data = await userService.getUsersPage(pageNum, 20);
+      const data = await userService.getUsersPage(pageNum, 20);//returned data in json
       setUsersList(prev => isInitial ? data.users : [...prev, ...data.users]);
-      setTotalCount(data.total);
-      setHasMore(data.hasMore);
+      setTotalCount(data.total);//total 150 users 
+      setHasMore(data.hasMore);//to load more if backend has more users 
     } catch (error) {
       console.error('Failed to fetch users', error);
-    } finally {
+    } finally {//always runs 
       setLoading(false);
       setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    fetchPage(1, true);
+    fetchPage(1, true);//loads page 1
   }, []);
 
   const handleLoadMore = useCallback(() => {
@@ -48,66 +52,81 @@ export default function HomeScreen() {
 
   const handleOpenAddModal = () => {
     setSelectedUser(null);
-    setModalVisible(true);
+  setFieldErrors({});
+  setModalVisible(true);
   };
 
   const handleOpenEditModal = (user: UserRecord) => {
-    setSelectedUser(user);
-    setModalVisible(true);
+     setSelectedUser(user);
+  setFieldErrors({});
+  setModalVisible(true);
   };
 
   const handlePayNow = async () => {
-    try {
-      const res = await fetch('http://192.168.31.142:5050/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: 5000, currency: 'inr' }), // ₹50.00
-      });
-      const data: { clientSecret: string } = await res.json();
-      const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: 'Your App Name',
-        paymentIntentClientSecret: data.clientSecret,
-      });
-      if (initError) {
-        Alert.alert('Error', initError.message);
-        return;
-      }
-      const { error: presentError } = await presentPaymentSheet();
-      if (presentError) {
-        Alert.alert('Payment failed', presentError.message);
-      } else {
-        Alert.alert('Success', 'Payment completed!');
-      }
-    } catch (err) {
-  console.error('Pay now error:', err);
-  Alert.alert('Error', 'Something went wrong.');
-}
-  };
+  const rupees = parseFloat(paymentAmount);
+  if (isNaN(rupees) || rupees <= 0) {
+    Alert.alert('Error', 'Please enter a valid amount.');
+    return;
+  }
+  const amountInPaise = Math.round(rupees * 100);
+
+  try {
+    const res = await fetch('https://headset-undercook-resent.ngrok-free.dev/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: amountInPaise }),
+    });
+    const data: { clientSecret: string } = await res.json();
+    const { error: initError } = await initPaymentSheet({
+      merchantDisplayName: 'Your App Name',
+      paymentIntentClientSecret: data.clientSecret,
+    });
+    if (initError) {
+      Alert.alert('Error', initError.message);
+      return;
+    }
+    const { error: presentError } = await presentPaymentSheet();
+    if (presentError) {
+      Alert.alert('Payment failed', presentError.message);
+    } else {
+      Alert.alert('Success', 'Payment completed!');
+      setPaymentAmount('');
+    }
+  } catch (err) {
+    console.error('Pay now error:', err);
+    Alert.alert('Error', 'Something went wrong.');
+  }
+};
 
   const handleSaveUser = async (formData: any) => {
-    try {
-      if (selectedUser) {
-        await userService.updateUser(selectedUser._id, {
-          firstname: formData.name.trim(),
-          surname: formData.surname.trim(),
-          email: formData.email.trim().toLowerCase(),
-        });
-      } else {
-        await userService.createUser({
-          firstname: formData.name.trim(),
-          surname: formData.surname.trim(),
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password || 'bypass_pass',
-        });
-      }
-      Alert.alert('Success', selectedUser ? 'User updated successfully.' : 'New user added successfully.');
-      setModalVisible(false);
-      fetchPage(1, true);
-      setPage(1);
-    } catch (err: any) {
+  try {
+    setFieldErrors({});
+    if (selectedUser) {
+      await userService.updateUser(selectedUser._id, {
+        firstname: formData.name.trim(),
+        surname: formData.surname.trim(),
+        email: formData.email.trim().toLowerCase(),
+      });
+    } else {
+      await userService.createUser({
+        firstname: formData.name.trim(),
+        surname: formData.surname.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password || 'bypass_pass',
+      });
+    }
+    Alert.alert('Success', selectedUser ? 'User updated successfully.' : 'New user added successfully.');
+    setModalVisible(false);
+    fetchPage(1, true);
+    setPage(1);
+  } catch (err: any) {
+    if (err.errors) {
+      setFieldErrors(err.errors);
+    } else {
       Alert.alert('Error', err.message || 'Something went wrong.');
     }
-  };
+  }
+};
 
   const handleDeleteUser = async (_email: string) => {
     try {
@@ -178,6 +197,13 @@ export default function HomeScreen() {
                 </View>
                 <View style={{ flexDirection: 'column', gap: 10, alignItems: 'stretch' }}>
                   <Button label="+ Add User" onPress={handleOpenAddModal} style={{ paddingVertical: 10, paddingHorizontal: 14 }} />
+                  <TextInput style={{ backgroundColor: theme.surface, color: theme.text,fontFamily, fontSize, paddingHorizontal: 14, paddingVertical: 8, borderRadius:8, borderWidth: 1, borderColor: theme.border,}}
+                  placeholder="Amount in ₹"
+                  placeholderTextColor={theme.subtext}
+                  value={paymentAmount}
+                  onChangeText={setPaymentAmount}
+                  keyboardType="numeric"
+                  />
                   <Button label="Pay Now" onPress={handlePayNow} style={{ paddingVertical: 10, paddingHorizontal: 14 }} />
                 </View>
               </View>
@@ -211,9 +237,13 @@ export default function HomeScreen() {
       />
       <UserModal
         visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+         onClose={() => {
+    setModalVisible(false);
+    setFieldErrors({});
+  }}
         onSave={handleSaveUser}
         onDelete={handleDeleteUser}
+        fieldErrors={fieldErrors}
         initialData={selectedUser ? {
           name: selectedUser.firstname,
           surname: selectedUser.surname,

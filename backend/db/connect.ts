@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+//just for connection to mongodb compass
 export const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI as string);

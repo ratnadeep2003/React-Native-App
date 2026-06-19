@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-
+//schema of users 
 export interface IUser extends Document {
   firstname: string;
   surname: string;
